@@ -15,13 +15,15 @@ public class PlayerController : MonoBehaviour
 
     private RaycastHit m_groundAt;
     private Collision m_wallAt;
+    private List<Collision> m_levelAt = new List<Collision>();
 
     private Vector3 m_move;
 
     private float m_xAng = 0.0f, m_yAng = 0.0f;
 
-    private bool m_grounded = false, m_walled = false, m_jumping = false;
-
+    private int m_lastWallID = 0;
+    
+    private bool m_grounded = false, m_walled = false, m_levelTouch = false, m_jumping = false;
 
     // Use this for initialization
     void Start ()
@@ -56,25 +58,33 @@ public class PlayerController : MonoBehaviour
        
         transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.Euler(m_xAng, m_yAng, 0.0f), 0.8f);
 
-        if (m_grounded)
+        if(m_grounded)
         {
             transform.position = new Vector3(transform.position.x, Mathf.Lerp(transform.position.y, m_groundAt.point.y + m_height, 0.05f), transform.position.z);
             m_rigidbody.velocity = new Vector3(m_move.x * m_groundSpeed, m_rigidbody.velocity.y, m_move.z * m_groundSpeed);
         }
+        else if(m_walled)
+        {
+            m_rigidbody.velocity = new Vector3(Mathf.Lerp(m_rigidbody.velocity.x, m_move.x * m_groundSpeed, 0.01f), m_rigidbody.velocity.y + Physics.gravity.y *  0.25f * Time.fixedDeltaTime,
+                Mathf.Lerp(m_rigidbody.velocity.z, m_move.z * m_groundSpeed, 0.01f));
+        }
         else
         {
-            //m_rigidbody.velocity = Vector3.Lerp(m_rigidbody.velocity, new Vector3(m_move.x * m_groundSpeed, m_rigidbody.velocity.y, m_move.z * m_groundSpeed), 0.1f);
-            m_rigidbody.velocity = new Vector3(Mathf.Lerp(m_rigidbody.velocity.x, m_move.x * m_groundSpeed, 0.1f), m_rigidbody.velocity.y + Physics.gravity.y * Time.fixedDeltaTime, 
-                Mathf.Lerp(m_rigidbody.velocity.z, m_move.z * m_groundSpeed, 0.1f));
+            m_rigidbody.velocity = new Vector3(Mathf.Lerp(m_rigidbody.velocity.x, m_move.x * m_groundSpeed, 0.05f), m_rigidbody.velocity.y + Physics.gravity.y * Time.fixedDeltaTime, 
+                Mathf.Lerp(m_rigidbody.velocity.z, m_move.z * m_groundSpeed, 0.05f));
         }
     }
 
     public void Move(Vector2 move, Vector2 look)
     {
-        //Debug.Log("move == " + move);
-
         m_move = transform.TransformVector(new Vector3(move.normalized.x, 0.0f, move.normalized.y));
-        m_move = Vector3.ProjectOnPlane(m_move, Vector3.up).normalized;
+        
+        //No sticking to level with air control
+        if(m_levelTouch)
+        {
+            Vector3 intoLevel = Vector3.Project(m_move, m_levelAt[m_levelAt.Count - 1].contacts[0].normal);
+            m_move += m_levelAt[m_levelAt.Count - 1].contacts[0].normal * intoLevel.magnitude;
+        }
 
         m_xAng += m_turnSpeed * -look.y;
         m_yAng += m_turnSpeed * look.x;
@@ -87,65 +97,146 @@ public class PlayerController : MonoBehaviour
             m_jumping = true;
             m_grounded = false;
             m_rigidbody.useGravity = true;
-            m_rigidbody.AddForce(Vector3.up * m_jumpForce, ForceMode.Impulse);
+            transform.parent = null;
+            if (m_walled)
+            {                
+                m_rigidbody.AddForce(Vector3.up * m_jumpForce, ForceMode.Impulse);
+                m_rigidbody.AddForce(m_wallAt.contacts[0].normal * m_jumpForce * 2.0f, ForceMode.Impulse);                
+            }
+            else
+            {
+                m_rigidbody.AddForce(Vector3.up * m_jumpForce, ForceMode.Impulse);
+            }
         }
     }
 
     private void CheckGround()
     {
-        if (!m_jumping)
+        if(!m_jumping)
         {
             if (Physics.Raycast(transform.position, Vector3.down, out m_groundAt, m_height + 0.1f, LayerMask.GetMask("Default")))
             {
-                Debug.Log("Grounded!");
+                //Debug.Log("Grounded!");
                 m_grounded = true;
                 m_rigidbody.useGravity = false;
+
+                m_lastWallID = 0; //Last wall is last wall until grounded!
+
+                if (m_groundAt.collider.gameObject.tag == "MovingPlatform")
+                {
+                    transform.parent = m_groundAt.collider.gameObject.transform.parent;                    
+                }
+                else
+                {
+                    transform.parent = null;
+                }
             }
             else
             {
-                m_grounded = false;
-                m_rigidbody.useGravity = true;
+                m_grounded = false;         
+
+                if(!m_walled)
+                {
+                    m_rigidbody.useGravity = true;
+                }
             }
         }
     }
 
     private void OnCollisionEnter(Collision collision)
     {
-        if(!m_grounded)
+        //Check if level collision...
+        if (collision.gameObject.layer == LayerMask.NameToLayer("Default"))
         {
-            if (collision.gameObject.layer == LayerMask.NameToLayer("Default"))
+            m_levelTouch = true;
+            bool newTouch = true;
+            foreach(Collision col in m_levelAt)
             {
-                m_jumping = false;
-
-                if (Vector3.Dot(collision.contacts[0].normal, Vector3.up) < 0.45f)
+                if(col.gameObject.GetInstanceID() == collision.gameObject.GetInstanceID())
                 {
-                    m_walled = true;
-                    m_wallAt = collision;
+                    newTouch = false;
                 }
             }
-        }        
+            if(newTouch)
+            {
+                m_levelAt.Add(collision);
+            }
+
+            //Check if wall collision...
+            if (Vector3.Dot(collision.contacts[0].normal, Vector3.up) < 0.45f)
+            {
+                //Check if new wall...
+                if(m_lastWallID != collision.gameObject.GetInstanceID())
+                {
+                    m_lastWallID = collision.gameObject.GetInstanceID();
+
+                    m_jumping = false;
+                    m_walled = true;
+                    m_wallAt = collision;
+
+                    m_rigidbody.useGravity = false;
+                }
+            }
+            else
+            {
+                //Collided with flat enough ground (CheckGround() manages "bounce")
+                m_jumping = false;
+            }
+        }                
     }
 
     private void OnCollisionStay(Collision collision)
-    {
-        if(!m_grounded)
+    {   
+        if (collision.gameObject.layer == LayerMask.NameToLayer("Default"))
         {
-            if (collision.gameObject.layer == LayerMask.NameToLayer("Default"))
+            if(m_levelAt.Count != 0)
             {
-                if (Vector3.Dot(collision.contacts[0].normal, Vector3.up) < 0.45f)
-                {
-                    m_walled = true;
-                    m_wallAt = collision;
-                }
+                m_levelAt[m_levelAt.Count - 1] = collision;
+            }
+            
+            if (Vector3.Dot(collision.contacts[0].normal, Vector3.up) < 0.45f)
+            {
+                m_wallAt = collision;
             }
         }
     }
 
     private void OnCollisionExit(Collision collision)
     {
-        if(m_walled && collision.gameObject.layer == LayerMask.NameToLayer("Default"))
-        {            
-            m_walled = false;            
+        if(collision.gameObject.layer == LayerMask.NameToLayer("Default"))
+        {
+            if(m_levelAt.Count != 0)
+            {
+                //Debug.Log("manage touch list!");
+                //Debug.Log("m_levelAt.Count == " + m_levelAt.Count.ToString());
+                for(int i = 0; i <= m_levelAt.Count - 1; i++)
+                {
+                    //Debug.Log("i == " + i.ToString());
+                    if(m_levelAt[i].gameObject.GetInstanceID() == collision.gameObject.GetInstanceID())
+                    {
+                        //Debug.Log("removing touch!");
+                        m_levelAt.RemoveAt(i);
+                    }
+
+                    //Debug.Log("m_levelAt[" + i.ToString() + "].gameObject.GetInstanceID() == " + m_levelAt[i].gameObject.GetInstanceID().ToString());
+                    //Debug.Log("collision.gameObject.GetInstanceID() == " + collision.gameObject.GetInstanceID().ToString());
+                }
+            }
+            if(m_levelAt.Count == 0)
+            {
+                m_levelTouch = false;
+            }
+
+            if (m_walled)
+            {
+                m_walled = false;
+                m_wallAt = null;
+            }
+
+            if (!m_grounded)
+            {
+                m_rigidbody.useGravity = true;
+            }
         }
     }
 
@@ -158,6 +249,16 @@ public class PlayerController : MonoBehaviour
         {
             Gizmos.color = Color.yellow;
             Gizmos.DrawWireSphere(m_wallAt.contacts[0].point, 0.3f);
+        }
+
+        if(m_levelTouch)
+        {
+            Gizmos.color = Color.magenta;
+
+            foreach (Collision col in m_levelAt)
+            {
+                Gizmos.DrawWireSphere(col.contacts[0].point, 0.3f);
+            }
         }
     }
 }
