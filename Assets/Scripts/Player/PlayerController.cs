@@ -17,13 +17,31 @@ public class PlayerController : MonoBehaviour
     private Collision m_wallAt;
     private List<Collision> m_levelAt = new List<Collision>();
 
-    private Vector3 m_move;
+    private Vector3 m_move, m_moveInput;
 
     private float m_xAng = 0.0f, m_yAng = 0.0f;
 
     private int m_lastWallID = 0;
     
     private bool m_grounded = false, m_walled = false, m_levelTouch = false, m_jumping = false;
+
+    //Utility functions
+    private float smoothstep(float edge0, float edge1, float x)
+    {
+        // Scale, bias and saturate x to 0..1 range
+        x = clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+        // Evaluate polynomial
+        return x * x * (3 - 2 * x);
+    }
+
+    private float clamp(float x, float lowerlimit, float upperlimit)
+    {
+        if (x < lowerlimit)
+            x = lowerlimit;
+        if (x > upperlimit)
+            x = upperlimit;
+        return x;
+    }
 
     // Use this for initialization
     void Start ()
@@ -65,7 +83,7 @@ public class PlayerController : MonoBehaviour
         }
         else if(m_walled)
         {
-            m_rigidbody.velocity = new Vector3(Mathf.Lerp(m_rigidbody.velocity.x, m_move.x * m_groundSpeed, 0.01f), m_rigidbody.velocity.y + Physics.gravity.y *  0.25f * Time.fixedDeltaTime,
+            m_rigidbody.velocity = new Vector3(Mathf.Lerp(m_rigidbody.velocity.x, m_move.x * m_groundSpeed, 0.01f), m_rigidbody.velocity.y + Physics.gravity.y *  0.5f * Time.fixedDeltaTime,
                 Mathf.Lerp(m_rigidbody.velocity.z, m_move.z * m_groundSpeed, 0.01f));
         }
         else
@@ -78,12 +96,20 @@ public class PlayerController : MonoBehaviour
     public void Move(Vector2 move, Vector2 look)
     {
         m_move = transform.TransformVector(new Vector3(move.normalized.x, 0.0f, move.normalized.y));
+        m_moveInput = m_move; //Inteded move direction
         
         //No sticking to level with air control
         if(m_levelTouch)
         {
             Vector3 intoLevel = Vector3.Project(m_move, m_levelAt[m_levelAt.Count - 1].contacts[0].normal);
             m_move += m_levelAt[m_levelAt.Count - 1].contacts[0].normal * intoLevel.magnitude;
+        }
+
+        //Make wall running "sticky" (make it easier to wall jump/bounce)...
+        if(m_walled)
+        {
+            Vector3 awayFromWall = Vector3.Project(m_move, m_wallAt.contacts[0].normal);
+            m_move -= m_wallAt.contacts[0].normal * awayFromWall.magnitude * 0.75f;
         }
 
         m_xAng += m_turnSpeed * -look.y;
@@ -94,17 +120,23 @@ public class PlayerController : MonoBehaviour
     {        
         if(!m_jumping)
         {
+            m_rigidbody.useGravity = true;
             m_jumping = true;
             m_grounded = false;
-            m_rigidbody.useGravity = true;
             transform.parent = null;
             if (m_walled)
-            {                
+            {
+                //Debug.Log("wall jump!");
                 m_rigidbody.AddForce(Vector3.up * m_jumpForce, ForceMode.Impulse);
-                m_rigidbody.AddForce(m_wallAt.contacts[0].normal * m_jumpForce * 2.0f, ForceMode.Impulse);                
+
+                Vector3 intoWall = Vector3.Project(m_moveInput, m_wallAt.contacts[0].normal);
+                float wallJump = 1.0f - smoothstep(0.5f, 0.9f, intoWall.magnitude * (1.0f - clamp(Vector3.Dot(intoWall, m_wallAt.contacts[0].normal), 0.0f, 1.0f)));
+
+                m_rigidbody.AddForce(m_wallAt.contacts[0].normal * m_jumpForce * 2.0f * wallJump, ForceMode.Impulse);                
             }
             else
             {
+                //Debug.Log("ground jump!");
                 m_rigidbody.AddForce(Vector3.up * m_jumpForce, ForceMode.Impulse);
             }
         }

@@ -9,6 +9,8 @@ public class PlayerInput : MonoBehaviour
 
     private Vector2 m_move, m_look;
 
+    private bool m_jumpAvailable = true;
+
     // Use this for initialization
     void Start ()
     {
@@ -22,9 +24,14 @@ public class PlayerInput : MonoBehaviour
 	// Update is called once per frame
 	void FixedUpdate ()
     {
-        if (Input.GetButton("Jump"))
+        if (Input.GetButton("Jump") && m_jumpAvailable)
         {
             m_playerController.Jump();
+            m_jumpAvailable = false;
+        }
+        else if (!m_jumpAvailable && !Input.GetButton("Jump"))
+        {
+            m_jumpAvailable = true;
         }
 
         // Get WASD input
