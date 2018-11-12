@@ -13,8 +13,8 @@ public class PlayerController : MonoBehaviour
 
     private Rigidbody m_rigidbody;
 
-    private RaycastHit m_groundAt;
-    private Collision m_wallAt;
+    private RaycastHit m_groundAt = new RaycastHit();
+    private Collision m_wallAt = new Collision();
     private List<Collision> m_levelAt = new List<Collision>();
 
     private Vector3 m_move, m_moveInput;
@@ -114,6 +114,18 @@ public class PlayerController : MonoBehaviour
 
         m_xAng += m_turnSpeed * -look.y;
         m_yAng += m_turnSpeed * look.x;
+        
+        if(m_groundAt.collider != null)
+        {
+            if (m_groundAt.collider.gameObject.tag == "MovingPlatform")
+            {
+                //Vector3 pointVel = m_groundAt.collider.gameObject.GetComponent<Rigidbody>().GetPointVelocity(m_groundAt.point);
+
+
+
+                //Debug.Log(pointVel.ToString());
+            }
+        }
     }
 
     public void Jump()
@@ -156,7 +168,7 @@ public class PlayerController : MonoBehaviour
 
                 if (m_groundAt.collider.gameObject.tag == "MovingPlatform")
                 {
-                    transform.parent = m_groundAt.collider.gameObject.transform.parent;                    
+                    transform.parent = m_groundAt.transform.parent;                    
                 }
                 else
                 {
