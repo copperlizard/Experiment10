@@ -22,7 +22,7 @@ public class PlayerCamera : MonoBehaviour
 	// Update is called once per frame
 	void Update ()
     {
-        transform.position = Vector3.Lerp(transform.position, m_player.transform.position, 80.0f * Time.deltaTime);
+        transform.position = Vector3.Slerp(transform.position, m_player.transform.position, 80.0f * Time.deltaTime);
         transform.rotation = m_player.transform.rotation;
 	}
 }

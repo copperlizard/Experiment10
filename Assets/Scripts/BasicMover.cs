@@ -42,4 +42,9 @@ public class BasicMover : MonoBehaviour
             }
         }
     }
+
+    public Vector3 GetVelocity()
+    {
+        return (m_wayPoints[m_point] - transform.position).normalized * m_moveSpeed;
+    }
 }

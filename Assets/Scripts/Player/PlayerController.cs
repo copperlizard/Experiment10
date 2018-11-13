@@ -7,7 +7,7 @@ using UnityEngine;
 public class PlayerController : MonoBehaviour
 {
     [SerializeField]
-    private float m_height = 1.0f, m_turnSpeed = 5.0f, m_groundSpeed = 10.0f, m_jumpForce = 10.0f;
+    private float m_height = 1.0f, m_turnSpeed = 5.0f, m_groundSpeed = 10.0f, m_airSpeed = 10.0f, m_jumpForce = 10.0f;
 
     private PlayerInput m_playerInput;
 
@@ -88,8 +88,12 @@ public class PlayerController : MonoBehaviour
         }
         else
         {
-            m_rigidbody.velocity = new Vector3(Mathf.Lerp(m_rigidbody.velocity.x, m_move.x * m_groundSpeed, 0.05f), m_rigidbody.velocity.y + Physics.gravity.y * Time.fixedDeltaTime, 
-                Mathf.Lerp(m_rigidbody.velocity.z, m_move.z * m_groundSpeed, 0.05f));
+            //m_rigidbody.velocity = new Vector3(Mathf.Lerp(m_rigidbody.velocity.x, m_move.x * m_airSpeed, 0.05f), m_rigidbody.velocity.y + Physics.gravity.y * Time.fixedDeltaTime, 
+            //    Mathf.Lerp(m_rigidbody.velocity.z, m_move.z * m_airSpeed, 0.05f));
+
+            Vector3 tarVel = new Vector3(m_move.x * m_airSpeed, m_rigidbody.velocity.y + Physics.gravity.y * Time.fixedDeltaTime, m_move.z * m_airSpeed);
+            m_rigidbody.velocity = Vector3.Lerp(new Vector3(m_rigidbody.velocity.x, m_rigidbody.velocity.y + Physics.gravity.y * Time.fixedDeltaTime, m_rigidbody.velocity.z),
+                tarVel, 0.05f * m_move.magnitude);
         }
     }
 
@@ -114,18 +118,6 @@ public class PlayerController : MonoBehaviour
 
         m_xAng += m_turnSpeed * -look.y;
         m_yAng += m_turnSpeed * look.x;
-        
-        if(m_groundAt.collider != null)
-        {
-            if (m_groundAt.collider.gameObject.tag == "MovingPlatform")
-            {
-                //Vector3 pointVel = m_groundAt.collider.gameObject.GetComponent<Rigidbody>().GetPointVelocity(m_groundAt.point);
-
-
-
-                //Debug.Log(pointVel.ToString());
-            }
-        }
     }
 
     public void Jump()
@@ -134,8 +126,7 @@ public class PlayerController : MonoBehaviour
         {
             m_rigidbody.useGravity = true;
             m_jumping = true;
-            m_grounded = false;
-            transform.parent = null;
+            m_grounded = false;            
             if (m_walled)
             {
                 //Debug.Log("wall jump!");
@@ -144,12 +135,39 @@ public class PlayerController : MonoBehaviour
                 Vector3 intoWall = Vector3.Project(m_moveInput, m_wallAt.contacts[0].normal);
                 float wallJump = 1.0f - smoothstep(0.5f, 0.9f, intoWall.magnitude * (1.0f - clamp(Vector3.Dot(intoWall, m_wallAt.contacts[0].normal), 0.0f, 1.0f)));
 
-                m_rigidbody.AddForce(m_wallAt.contacts[0].normal * m_jumpForce * 2.0f * wallJump, ForceMode.Impulse);                
+                m_rigidbody.AddForce(m_wallAt.contacts[0].normal * m_jumpForce * wallJump, ForceMode.Impulse);                
             }
             else
             {
                 //Debug.Log("ground jump!");
                 m_rigidbody.AddForce(Vector3.up * m_jumpForce, ForceMode.Impulse);
+            }
+
+            //Jumping off moving platform; maintain momementum
+            if(transform.parent != null)
+            {
+                BasicSpinner spinner = transform.parent.GetComponent<BasicSpinner>();
+                if(spinner != null)
+                {
+                    m_rigidbody.velocity += spinner.GetVelocityAt(m_groundAt.point);
+                }
+
+                BasicMover mover = transform.parent.GetComponent<BasicMover>();
+                if(mover != null)
+                {
+                    m_rigidbody.velocity += mover.GetVelocity();
+                }
+
+                if(m_groundAt.collider != null)
+                {
+                    Rigidbody body = m_groundAt.collider.GetComponent<Rigidbody>();
+                    if (body != null)
+                    {
+                        m_rigidbody.velocity += body.velocity;
+                    }
+                }
+
+                transform.parent = null;
             }
         }
     }
@@ -166,11 +184,13 @@ public class PlayerController : MonoBehaviour
 
                 m_lastWallID = 0; //Last wall is last wall until grounded!
 
+                //Land on moving platform
                 if (m_groundAt.collider.gameObject.tag == "MovingPlatform")
                 {
                     transform.parent = m_groundAt.transform.parent;                    
                 }
-                else
+                //Step off moving platform (does not maintain momentum from moving platform...)
+                else 
                 {
                     transform.parent = null;
                 }
