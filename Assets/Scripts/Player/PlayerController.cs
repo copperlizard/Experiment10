@@ -7,7 +7,7 @@ using UnityEngine;
 public class PlayerController : MonoBehaviour
 {
     [SerializeField]
-    private float m_height = 1.0f, m_turnSpeed = 5.0f, m_groundSpeed = 10.0f, m_airSpeed = 10.0f, m_jumpForce = 10.0f;
+    private float m_height = 1.0f, m_turnSpeed = 5.0f, m_groundSpeed = 10.0f, m_airSpeed = 10.0f, m_jumpForce = 10.0f, m_wallRunTilt = 15.0f;
 
     private PlayerInput m_playerInput;
 
@@ -19,7 +19,7 @@ public class PlayerController : MonoBehaviour
 
     private Vector3 m_move, m_moveInput;
 
-    private float m_xAng = 0.0f, m_yAng = 0.0f;
+    private float m_xAng = 0.0f, m_yAng = 0.0f, m_zAng = 0.0f;
 
     private int m_lastWallID = 0;
     
@@ -73,8 +73,13 @@ public class PlayerController : MonoBehaviour
     private void FixedUpdate()
     {
         CheckGround();
+
+        if(!m_walled)
+        {
+            m_zAng = Mathf.Lerp(m_zAng, 0.0f, 0.8f);
+        }
        
-        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.Euler(m_xAng, m_yAng, 0.0f), 0.8f);
+        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.Euler(m_xAng, m_yAng, m_zAng), 0.8f);
 
         if(m_grounded)
         {
@@ -85,6 +90,16 @@ public class PlayerController : MonoBehaviour
         {
             m_rigidbody.velocity = new Vector3(Mathf.Lerp(m_rigidbody.velocity.x, m_move.x * m_groundSpeed, 0.01f), m_rigidbody.velocity.y + Physics.gravity.y *  0.5f * Time.fixedDeltaTime,
                 Mathf.Lerp(m_rigidbody.velocity.z, m_move.z * m_groundSpeed, 0.01f));
+
+            float tiltFactor = Vector3.Dot(transform.right, m_wallAt.contacts[0].normal);
+            if (tiltFactor <= 0.0f)
+            {
+                m_zAng = Mathf.Lerp(m_zAng, m_wallRunTilt * -tiltFactor, 0.2f);
+            }
+            else
+            {
+                m_zAng = Mathf.Lerp(m_zAng, -m_wallRunTilt * tiltFactor, 0.2f);
+            }
         }
         else
         {
