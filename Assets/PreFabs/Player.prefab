@@ -86,6 +86,9 @@ MonoBehaviour:
   m_airSpeed: 10
   m_jumpForce: 700
   m_wallRunTilt: 15
+  m_maxTilt: 89
+  m_minTilt: -89
+  m_headBob: 0.45
 --- !u!135 &135601652193627772
 SphereCollider:
   m_ObjectHideFlags: 1

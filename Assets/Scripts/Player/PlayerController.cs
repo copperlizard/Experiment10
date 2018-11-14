@@ -7,7 +7,8 @@ using UnityEngine;
 public class PlayerController : MonoBehaviour
 {
     [SerializeField]
-    private float m_height = 1.0f, m_turnSpeed = 5.0f, m_groundSpeed = 10.0f, m_airSpeed = 10.0f, m_jumpForce = 10.0f, m_wallRunTilt = 15.0f;
+    private float m_height = 1.0f, m_turnSpeed = 5.0f, m_groundSpeed = 10.0f, m_airSpeed = 10.0f, m_jumpForce = 10.0f, m_wallRunTilt = 15.0f,
+        m_maxTilt = 89.0f, m_minTilt = -89.0f, m_headBob = 0.25f;
 
     private PlayerInput m_playerInput;
 
@@ -23,7 +24,7 @@ public class PlayerController : MonoBehaviour
 
     private int m_lastWallID = 0;
     
-    private bool m_grounded = false, m_walled = false, m_levelTouch = false, m_jumping = false;
+    private bool m_grounded = false, m_walled = false, m_levelTouch = false, m_jumping = false, m_falling = false;
 
     //Utility functions
     private float smoothstep(float edge0, float edge1, float x)
@@ -72,6 +73,16 @@ public class PlayerController : MonoBehaviour
     // FixedUpdate called once per physics loop
     private void FixedUpdate()
     {
+        //Dont get stuck "jumping" while resting on the ground/level...        
+        if (!m_grounded && m_jumping)
+        {
+            if (m_rigidbody.velocity.y <= 0.0f)
+            {
+                m_jumping = false;
+                m_falling = true;
+            }
+        }
+
         CheckGround();
 
         if(!m_walled)
@@ -83,7 +94,8 @@ public class PlayerController : MonoBehaviour
 
         if(m_grounded)
         {
-            transform.position = new Vector3(transform.position.x, Mathf.Lerp(transform.position.y, m_groundAt.point.y + m_height, 0.05f), transform.position.z);
+            float bob = m_headBob * Mathf.Sin(Time.time * 17.0f) * m_move.normalized.magnitude;            
+            transform.position = new Vector3(transform.position.x, Mathf.Lerp(transform.position.y, m_groundAt.point.y + m_height + bob, 0.05f), transform.position.z);
             m_rigidbody.velocity = new Vector3(m_move.x * m_groundSpeed, m_rigidbody.velocity.y, m_move.z * m_groundSpeed);
         }
         else if(m_walled)
@@ -115,7 +127,7 @@ public class PlayerController : MonoBehaviour
     public void Move(Vector2 move, Vector2 look)
     {
         m_move = transform.TransformVector(new Vector3(move.normalized.x, 0.0f, move.normalized.y));
-        m_moveInput = m_move; //Inteded move direction
+        m_moveInput = m_move; //Intended move direction
         
         //No sticking to level with air control
         if(m_levelTouch)
@@ -131,13 +143,14 @@ public class PlayerController : MonoBehaviour
             m_move -= m_wallAt.contacts[0].normal * awayFromWall.magnitude * 0.75f;
         }
 
-        m_xAng += m_turnSpeed * -look.y;
+        //m_xAng += m_turnSpeed * -look.y;
+        m_xAng = clamp(m_xAng + m_turnSpeed * -look.y, -m_maxTilt, -m_minTilt);
         m_yAng += m_turnSpeed * look.x;
     }
 
     public void Jump()
     {        
-        if(!m_jumping)
+        if(!m_jumping && !m_falling)
         {
             m_rigidbody.useGravity = true;
             m_jumping = true;
@@ -195,6 +208,8 @@ public class PlayerController : MonoBehaviour
             {
                 //Debug.Log("Grounded!");
                 m_grounded = true;
+                m_falling = false;
+                m_walled = false;
                 m_rigidbody.useGravity = false;
 
                 m_lastWallID = 0; //Last wall is last wall until grounded!
@@ -212,7 +227,7 @@ public class PlayerController : MonoBehaviour
             }
             else
             {
-                m_grounded = false;         
+                m_grounded = false;     
 
                 if(!m_walled)
                 {
@@ -250,16 +265,18 @@ public class PlayerController : MonoBehaviour
                     m_lastWallID = collision.gameObject.GetInstanceID();
 
                     m_jumping = false;
+                    m_falling = false;
                     m_walled = true;
                     m_wallAt = collision;
 
                     m_rigidbody.useGravity = false;
-                }
+                }                
             }
             else
             {
                 //Collided with flat enough ground (CheckGround() manages "bounce")
                 m_jumping = false;
+                m_falling = false;
             }
         }                
     }
